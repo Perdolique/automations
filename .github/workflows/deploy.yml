@@ -130,7 +130,6 @@ jobs:
 
       # Deploy to Cloudflare Workers
       - name: Deploy version to staging
-        id: deploy-version
         continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare-account-id }}
@@ -163,7 +162,7 @@ jobs:
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Status** | ${{ steps.get-deployment-url.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.event.pull_request.head.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.event.pull_request.head.ref }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **PR** | [#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Preview URL** | ${{ steps.get-deployment-url.outcome == 'success' && steps.get-deployment-url.outputs.preview-url || 'Not available' }} |" >> $GITHUB_STEP_SUMMARY
@@ -227,7 +226,6 @@ jobs:
 
       # Deploy to Cloudflare Workers
       - name: Deploy to production
-        id: deploy-production
         continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare-account-id }}
@@ -244,8 +242,8 @@ jobs:
           PRODUCTION_URL=$(jq --raw-output --slurp 'first(.[] | select(.url) | .url)' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
 
           if [ -z "$PRODUCTION_URL" ]; then
-            echo "Warning: No production URL found in wrangler log"
-            PRODUCTION_URL="Not available"
+            echo "Error: No production URL found in wrangler log"
+            exit 1
           fi
 
           echo "production-url=$PRODUCTION_URL" >> $GITHUB_OUTPUT
@@ -258,7 +256,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.deploy-production.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.get-deployment-url.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
@@ -266,7 +264,7 @@ jobs:
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
-        if: ${{ steps.deploy-production.outcome == 'failure' }}
+        if: ${{ steps.get-deployment-url.outcome == 'failure' }}
         run: |
           echo "Deployment to production failed."
           exit 1
