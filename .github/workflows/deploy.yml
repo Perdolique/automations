@@ -260,7 +260,7 @@ jobs:
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **URL** | ${{ steps.get-deployment-url.outputs.production-url != 'Not available' && steps.get-deployment-url.outputs.production-url || 'Not available' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | ${{ steps.get-deployment-url.outcome == 'success' && steps.get-deployment-url.outputs.production-url || 'Not available' }} |" >> $GITHUB_STEP_SUMMARY
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
