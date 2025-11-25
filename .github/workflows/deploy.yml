@@ -239,7 +239,7 @@ jobs:
         id: get-deployment-url
         continue-on-error: true
         run: |
-          PRODUCTION_URL=$(jq --raw-output --slurp 'first(.[] | select(.url) | .url)' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
+          PRODUCTION_URL=$(jq --raw-output --slurp 'first(.[] | select(.targets) | .targets[0])' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
 
           if [ -z "$PRODUCTION_URL" ]; then
             echo "Error: No production URL found in wrangler log"
