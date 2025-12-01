@@ -235,18 +235,32 @@ jobs:
           pnpm run ${{ inputs.deploy-production-command }}
 
       # Extract deployment URL from wrangler log
-      - name: Get deployment URL
-        id: get-deployment-url
+      - name: Get deployment URLs
+        id: get-deployment-urls
         continue-on-error: true
         run: |
-          PRODUCTION_URL=$(jq --raw-output --slurp 'first(.[] | select(.targets) | .targets[0])' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
+          # Extract all targets from wrangler log as newline-separated list
+          TARGETS=$(jq --raw-output --slurp 'first(.[] | select(.targets)) | .targets[]' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
 
-          if [ -z "$PRODUCTION_URL" ]; then
-            echo "Error: No production URL found in wrangler log"
+          if [ -z "$TARGETS" ]; then
+            echo "Error: No production URLs found in wrangler log"
             exit 1
           fi
 
-          echo "production-url=$PRODUCTION_URL" >> $GITHUB_OUTPUT
+          # Process each target: add https:// prefix if needed
+          URLS=""
+          while IFS= read -r target; do
+            if [ -z "$target" ]; then continue; fi
+            if [[ "$target" != https://* ]]; then
+              URLS+="https://$target"$'\n'
+            else
+              URLS+="$target"$'\n'
+            fi
+          done <<< "$TARGETS"
+
+          echo "production-urls<<EOF" >> $GITHUB_OUTPUT
+          echo -n "$URLS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       # Create deployment summary
       - name: Create deployment summary
@@ -256,15 +270,25 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.get-deployment-url.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **URL** | ${{ steps.get-deployment-url.outcome == 'success' && steps.get-deployment-url.outputs.production-url || 'Not available' }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            while IFS= read -r url; do
+              if [ -z "$url" ]; then continue; fi
+              echo "- $url" >> $GITHUB_STEP_SUMMARY
+            done <<< "${{ steps.get-deployment-urls.outputs.production-urls }}"
+          fi
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
-        if: ${{ steps.get-deployment-url.outcome == 'failure' }}
+        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
         run: |
           echo "Deployment to production failed."
           exit 1
