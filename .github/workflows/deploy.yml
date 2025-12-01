@@ -236,7 +236,7 @@ jobs:
 
       # Extract deployment URL from wrangler log
       - name: Get deployment URLs
-        id: get-deployment-url
+        id: get-deployment-urls
         continue-on-error: true
         run: |
           # Extract all targets from wrangler log as newline-separated list
@@ -250,6 +250,7 @@ jobs:
           # Process each target: add https:// prefix if needed
           URLS=""
           while IFS= read -r target; do
+            if [ -z "$target" ]; then continue; fi
             if [[ "$target" != https://* ]]; then
               URLS+="https://$target"$'\n'
             else
@@ -269,24 +270,25 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.get-deployment-url.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ steps.get-deployment-url.outcome }}" == "success" ]]; then
+          if [[ "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
 
             while IFS= read -r url; do
+              if [ -z "$url" ]; then continue; fi
               echo "- $url" >> $GITHUB_STEP_SUMMARY
-            done <<< "${{ steps.get-deployment-url.outputs.production-urls }}"
+            done <<< "${{ steps.get-deployment-urls.outputs.production-urls }}"
           fi
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
-        if: ${{ steps.get-deployment-url.outcome == 'failure' }}
+        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
         run: |
           echo "Deployment to production failed."
           exit 1
