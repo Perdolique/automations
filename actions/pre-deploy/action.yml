@@ -13,7 +13,7 @@ runs:
   using: composite
   steps:
     # Setup Node.js and install dependencies
-    - uses: ./.github/actions/setup-pnpm
+    - uses: Perdolique/.github/actions/setup-pnpm@v0.0.1
       with:
         install-dependencies: true
 
