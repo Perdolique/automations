@@ -56,7 +56,7 @@ on:
 
 jobs:
   deploy:
-    uses: Perdolique/automations/.github/workflows/deploy.yml@v1.0.0
+    uses: Perdolique/automations/.github/workflows/deploy.yml@v1.0.2
     with:
       working-directory: '.'
       artifact-path: '.output'
@@ -83,7 +83,7 @@ Sets up pnpm and Node.js environment 📦
 **Example:**
 
 ```yaml
-- uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.0
+- uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.2
   with:
     install-dependencies: true
 ```
@@ -100,7 +100,7 @@ Prepares deployment artifact 📥
 **Example:**
 
 ```yaml
-- uses: Perdolique/automations/.github/actions/pre-deploy@v1.0.0
+- uses: Perdolique/automations/.github/actions/pre-deploy@v1.0.2
   with:
     artifact-name: 'deployment-artifact'
     unpack-path: '.output'
