@@ -26,17 +26,32 @@ on:
         required: false
         default: 'build'
         type: string
-      typecheck-command:
+      test-typecheck-command:
         description: pnpm script name for type checking (optional, skipped if empty)
         required: false
-        default: 'test:typecheck'
+        default: ''
         type: string
-      deploy-staging-command:
+      lint-markdown-command:
+        description: pnpm script name for markdown linting (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      lint-oxlint-command:
+        description: pnpm script name for oxlint (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      test-unit-command:
+        description: pnpm script name for unit tests (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      deploy-to-staging-command:
         description: pnpm script name for deploying to staging
         required: false
         default: 'deploy:versions:staging'
         type: string
-      deploy-production-command:
+      deploy-to-production-command:
         description: pnpm script name for deploying to production
         required: false
         default: 'deploy:production'
@@ -56,7 +71,7 @@ concurrency:
 jobs:
   # Check Typescript types correctness
   test-typecheck:
-    if: inputs.typecheck-command != ''
+    if: inputs.test-typecheck-command != ''
     name: Typecheck
     runs-on: ubuntu-24.04
     defaults:
@@ -65,12 +80,63 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
         with:
           install-dependencies: true
       - name: Run typecheck
         run: |
-          pnpm ${{ inputs.typecheck-command }}
+          pnpm ${{ inputs.test-typecheck-command }}
+
+  lint-markdown:
+    if: inputs.lint-markdown-command != ''
+    name: Markdown lint
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+        with:
+          install-dependencies: true
+      - name: Run markdown lint
+        run: |
+          pnpm run ${{ inputs.lint-markdown-command }}
+
+  lint-oxlint:
+    if: inputs.lint-oxlint-command != ''
+    name: Oxlint
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+        with:
+          install-dependencies: true
+      - name: Run lint
+        run: |
+          pnpm run ${{ inputs.lint-oxlint-command }}
+
+  test-unit:
+    if: inputs.test-unit-command != ''
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+        with:
+          install-dependencies: true
+      - name: Run unit tests
+        run: |
+          pnpm run ${{ inputs.test-unit-command }}
 
   # Build the project and upload artifact
   build:
@@ -82,7 +148,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
         with:
           install-dependencies: true
       - name: Build project
@@ -98,7 +164,14 @@ jobs:
           path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
 
   deploy-to-staging:
-    if: github.event_name == 'pull_request'
+    if: |
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.build.result == 'success' &&
+      (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
+      (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
+      (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
     name: Deploy to staging
     runs-on: ubuntu-24.04
     permissions:
@@ -107,6 +180,10 @@ jobs:
       wrangler-log: ${{ steps.set-wrangler-log.outputs.wrangler-log }}
     needs:
       - build
+      - test-typecheck
+      - lint-markdown
+      - lint-oxlint
+      - test-unit
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -115,11 +192,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # Setup, and download artifact
-      - uses: Perdolique/automations/.github/actions/pre-deploy@v1.0.3
+      # Setup pnpm and download artifact
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
         with:
-          artifact-name: ${{ inputs.artifact-name }}
-          unpack-path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
+          install-dependencies: true
+      - name: Download build artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
 
       # Set wrangler log file path for capturing output
       - name: Set wrangler output file path
@@ -136,7 +217,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare-api-token }}
         run: |
           export WRANGLER_OUTPUT_FILE_PATH=${{ steps.set-wrangler-log.outputs.wrangler-log }}
-          pnpm run ${{ inputs.deploy-staging-command }}
+          pnpm run ${{ inputs.deploy-to-staging-command }}
 
       # Extract deployment URL from wrangler log
       - name: Get deployment URL
@@ -197,12 +278,23 @@ jobs:
           exit 1
 
   deploy-to-production:
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      needs.build.result == 'success' &&
+      (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
+      (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
+      (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
     name: Deploy to production
     runs-on: ubuntu-24.04
     needs:
       - build
       - test-typecheck
+      - lint-markdown
+      - lint-oxlint
+      - test-unit
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -211,11 +303,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # Setup, and download artifact
-      - uses: Perdolique/automations/.github/actions/pre-deploy@v1.0.3
+      # Setup pnpm and download artifact
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
         with:
-          artifact-name: ${{ inputs.artifact-name }}
-          unpack-path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
+          install-dependencies: true
+      - name: Download build artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
 
       # Set wrangler log file path for capturing output
       - name: Set wrangler output file path
@@ -232,7 +328,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare-api-token }}
         run: |
           export WRANGLER_OUTPUT_FILE_PATH=${{ steps.set-wrangler-log.outputs.wrangler-log }}
-          pnpm run ${{ inputs.deploy-production-command }}
+          pnpm run ${{ inputs.deploy-to-production-command }}
 
       # Extract deployment URL from wrangler log
       - name: Get deployment URLs

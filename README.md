@@ -13,7 +13,7 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
 **Features:**
 
 - 🏗️ Builds the project and stores artifacts
-- ✅ Type-checks TypeScript (optional)
+- ✅ Runs opt-in checks before deploy
 - 🎯 Deploys to staging on every PR
 - 🚀 Deploys to production on push to default branch
 - 💬 Comments on PR with preview URL
@@ -24,9 +24,14 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
 - `artifact-path` - Path to the build output directory (default: `.output`)
 - `artifact-name` - Name of the deployment artifact (default: `deployment-artifact`)
 - `build-command` - pnpm script name for building the project (default: `build`)
-- `typecheck-command` - pnpm script name for type checking, skipped if empty (default: `test:typecheck`)
-- `deploy-staging-command` - pnpm script name for deploying to staging (default: `deploy:versions:staging`)
-- `deploy-production-command` - pnpm script name for deploying to production (default: `deploy:production`)
+- `test-typecheck-command` - pnpm script name for type checking, skipped if empty (default: empty)
+- `lint-markdown-command` - pnpm script name for markdown linting, skipped if empty (default: empty)
+- `lint-oxlint-command` - pnpm script name for oxlint, skipped if empty (default: empty)
+- `test-unit-command` - pnpm script name for unit tests, skipped if empty (default: empty)
+- `deploy-to-staging-command` - pnpm script name for deploying to staging (default: `deploy:versions:staging`)
+- `deploy-to-production-command` - pnpm script name for deploying to production (default: `deploy:production`)
+
+Optional checks gate both staging and production deploys. If a check command is not provided, its job is skipped.
 
 **Secrets:**
 
@@ -64,15 +69,18 @@ on:
 
 jobs:
   deploy:
-    uses: Perdolique/automations/.github/workflows/deploy.yml@v1.0.4
+    uses: Perdolique/automations/.github/workflows/deploy.yml@2
     with:
       working-directory: '.'
       artifact-path: '.output'
       artifact-name: 'my-app'
       build-command: 'build'
-      typecheck-command: 'test:typecheck' # empty to skip
-      deploy-staging-command: 'deploy:versions:staging' # will run as `pnpm run deploy:versions:staging`
-      deploy-production-command: 'deploy:production' # will run as `pnpm run deploy:production`
+      test-typecheck-command: 'test:typecheck'
+      lint-markdown-command: 'lint:markdown'
+      lint-oxlint-command: 'lint:oxlint'
+      test-unit-command: 'test:unit:ci'
+      deploy-to-staging-command: 'deploy:versions:staging' # will run as `pnpm run deploy:versions:staging`
+      deploy-to-production-command: 'deploy:production' # will run as `pnpm run deploy:production`
     secrets:
       cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -94,24 +102,6 @@ Sets up pnpm and Node.js environment 📦
 - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.4
   with:
     install-dependencies: true
-```
-
-#### `pre-deploy`
-
-Prepares deployment artifact 📥
-
-**Inputs:**
-
-- `artifact-name` - Name of the artifact to download
-- `unpack-path` - Path to unpack the downloaded artifact
-
-**Example:**
-
-```yaml
-- uses: Perdolique/automations/.github/actions/pre-deploy@v1.0.4
-  with:
-    artifact-name: 'deployment-artifact'
-    unpack-path: '.output'
 ```
 
 ## Dependabot 🤖
