@@ -31,6 +31,21 @@ on:
         required: false
         default: 'test:typecheck'
         type: string
+      markdown-command:
+        description: pnpm script name for markdown linting (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      lint-command:
+        description: pnpm script name for linting (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      unit-command:
+        description: pnpm script name for unit tests (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
       deploy-staging-command:
         description: pnpm script name for deploying to staging
         required: false
@@ -72,6 +87,57 @@ jobs:
         run: |
           pnpm ${{ inputs.typecheck-command }}
 
+  lint-markdown:
+    if: inputs.markdown-command != ''
+    name: Markdown lint
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.3
+        with:
+          install-dependencies: true
+      - name: Run markdown lint
+        run: |
+          pnpm run ${{ inputs.markdown-command }}
+
+  lint-oxlint:
+    if: inputs.lint-command != ''
+    name: Oxlint
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.3
+        with:
+          install-dependencies: true
+      - name: Run lint
+        run: |
+          pnpm run ${{ inputs.lint-command }}
+
+  test-unit:
+    if: inputs.unit-command != ''
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v1.0.3
+        with:
+          install-dependencies: true
+      - name: Run unit tests
+        run: |
+          pnpm run ${{ inputs.unit-command }}
+
   # Build the project and upload artifact
   build:
     name: Build artifact
@@ -98,7 +164,14 @@ jobs:
           path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
 
   deploy-to-staging:
-    if: github.event_name == 'pull_request'
+    if: |
+      always() &&
+      github.event_name == 'pull_request' &&
+      needs.build.result == 'success' &&
+      (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
+      (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
+      (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
     name: Deploy to staging
     runs-on: ubuntu-24.04
     permissions:
@@ -107,6 +180,10 @@ jobs:
       wrangler-log: ${{ steps.set-wrangler-log.outputs.wrangler-log }}
     needs:
       - build
+      - test-typecheck
+      - lint-markdown
+      - lint-oxlint
+      - test-unit
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -197,12 +274,23 @@ jobs:
           exit 1
 
   deploy-to-production:
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      needs.build.result == 'success' &&
+      (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
+      (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
+      (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
     name: Deploy to production
     runs-on: ubuntu-24.04
     needs:
       - build
       - test-typecheck
+      - lint-markdown
+      - lint-oxlint
+      - test-unit
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
