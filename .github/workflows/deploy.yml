@@ -46,6 +46,16 @@ on:
         required: false
         default: ''
         type: string
+      test-e2e-command:
+        description: pnpm script name for end-to-end tests (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      playwright-browsers:
+        description: Space-separated Playwright browsers to install before end-to-end tests
+        required: false
+        default: ''
+        type: string
       deploy-to-staging-command:
         description: pnpm script name for deploying to staging
         required: false
@@ -78,7 +88,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Run typecheck
@@ -93,7 +103,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Run markdown lint
@@ -108,7 +118,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Run lint
@@ -123,12 +133,31 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Run unit tests
         run: |
           pnpm run ${{ inputs.test-unit-command }}
+
+  test-e2e:
+    if: inputs.test-e2e-command != ''
+    name: End-to-end tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+        with:
+          install-dependencies: true
+      - name: Install Playwright browsers
+        if: inputs.playwright-browsers != ''
+        run: |
+          pnpm exec playwright install --with-deps ${{ inputs.playwright-browsers }}
+      - name: Run end-to-end tests
+        run: |
+          pnpm run ${{ inputs.test-e2e-command }}
 
   # Build the project and upload artifact
   build:
@@ -138,7 +167,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Build project
@@ -161,7 +190,8 @@ jobs:
       (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
       (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
       (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
-      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
+      (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
     name: Deploy to staging
     runs-on: ubuntu-24.04
     permissions:
@@ -174,12 +204,13 @@ jobs:
       - lint-markdown
       - lint-oxlint
       - test-unit
+      - test-e2e
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
       # Setup pnpm and download artifact
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Download build artifact
@@ -272,7 +303,8 @@ jobs:
       (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
       (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
       (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
-      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped')
+      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
+      (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
     name: Deploy to production
     runs-on: ubuntu-24.04
     needs:
@@ -281,12 +313,13 @@ jobs:
       - lint-markdown
       - lint-oxlint
       - test-unit
+      - test-e2e
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
       # Setup pnpm and download artifact
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
         with:
           install-dependencies: true
       - name: Download build artifact

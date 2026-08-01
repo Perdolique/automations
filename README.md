@@ -28,6 +28,10 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
 - `lint-markdown-command` - pnpm script name for markdown linting, skipped if empty (default: empty)
 - `lint-oxlint-command` - pnpm script name for oxlint, skipped if empty (default: empty)
 - `test-unit-command` - pnpm script name for unit tests, skipped if empty (default: empty)
+- `test-e2e-command` - pnpm script name for end-to-end tests, skipped if
+  empty (default: empty)
+- `playwright-browsers` - Space-separated Playwright browsers installed before
+  end-to-end tests (default: empty)
 - `deploy-to-staging-command` - pnpm script name for deploying to staging (default: `deploy:versions:staging`)
 - `deploy-to-production-command` - pnpm script name for deploying to production (default: `deploy:production`)
 
@@ -69,7 +73,7 @@ on:
 
 jobs:
   deploy:
-    uses: Perdolique/automations/.github/workflows/deploy.yml@v2
+    uses: Perdolique/automations/.github/workflows/deploy.yml@v3
     with:
       working-directory: '.'
       artifact-path: '.output'
@@ -79,6 +83,8 @@ jobs:
       lint-markdown-command: 'lint:markdown'
       lint-oxlint-command: 'lint:oxlint'
       test-unit-command: 'test:unit:ci'
+      test-e2e-command: 'test:e2e:ci'
+      playwright-browsers: 'chromium webkit'
       deploy-to-staging-command: 'deploy:versions:staging' # will run as `pnpm run deploy:versions:staging`
       deploy-to-production-command: 'deploy:production' # will run as `pnpm run deploy:production`
     secrets:
@@ -99,7 +105,7 @@ Sets up pnpm and Node.js environment 📦
 **Example:**
 
 ```yaml
-- uses: Perdolique/automations/.github/actions/setup-pnpm@v2
+- uses: Perdolique/automations/.github/actions/setup-pnpm@v3
   with:
     install-dependencies: true
 ```
