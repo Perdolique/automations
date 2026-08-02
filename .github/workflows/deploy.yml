@@ -182,22 +182,27 @@ jobs:
           name: ${{ inputs.artifact-name }}
           path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
 
-  deploy-to-staging:
+  deploy:
     if: |
       always() &&
-      github.event_name == 'pull_request' &&
+      (
+        github.event_name == 'pull_request' ||
+        (
+          github.event_name == 'push' &&
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        )
+      ) &&
       needs.build.result == 'success' &&
       (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
       (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
       (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
       (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
       (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
-    name: Deploy to staging
+    name: Deploy to ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
     runs-on: ubuntu-24.04
     permissions:
+      contents: read
       pull-requests: write
-    outputs:
-      wrangler-log: ${{ steps.set-wrangler-log.outputs.wrangler-log }}
     needs:
       - build
       - test-typecheck
@@ -227,14 +232,21 @@ jobs:
           echo "wrangler-log=$WRANGLER_LOG" >> $GITHUB_OUTPUT
 
       # Deploy to Cloudflare Workers
-      - name: Deploy to staging
+      - name: Deploy to ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
         continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare-account-id }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare-api-token }}
+          PRODUCTION_DEPLOY_COMMAND: ${{ inputs.deploy-to-production-command }}
+          STAGING_DEPLOY_COMMAND: ${{ inputs.deploy-to-staging-command }}
         run: |
           export WRANGLER_OUTPUT_FILE_PATH=${{ steps.set-wrangler-log.outputs.wrangler-log }}
-          pnpm run ${{ inputs.deploy-to-staging-command }}
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            pnpm run "$STAGING_DEPLOY_COMMAND"
+          else
+            pnpm run "$PRODUCTION_DEPLOY_COMMAND"
+          fi
 
       # Extract deployment URLs from wrangler log
       - name: Get deployment URLs
@@ -270,15 +282,25 @@ jobs:
       # Create deployment summary
       - name: Create deployment summary
         if: always()
+        env:
+          DEPLOYMENT_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+          DEPLOYMENT_HEADING: ${{ github.event_name == 'pull_request' && '🎭 Staging' || '🚀 Production' }}
+          DEPLOYMENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "## 🎭 Staging Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "## $DEPLOYMENT_HEADING Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Status** | ${{ steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit** | \`${{ github.event.pull_request.head.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Branch** | \`${{ github.event.pull_request.head.ref }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **PR** | [#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`$DEPLOYMENT_SHA\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`$DEPLOYMENT_BRANCH\` |" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "| **PR** | [#$PR_NUMBER]($PR_URL) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
           if [[ "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
@@ -293,7 +315,7 @@ jobs:
 
       # Comment on the pull request with success status
       - name: Comment successful deployment URLs
-        if: ${{ steps.get-deployment-urls.outcome == 'success' }}
+        if: ${{ github.event_name == 'pull_request' && steps.get-deployment-urls.outcome == 'success' }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
@@ -305,7 +327,7 @@ jobs:
 
       # Comment on the pull request with failure status
       - name: Comment deployment failure
-        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
+        if: ${{ github.event_name == 'pull_request' && steps.get-deployment-urls.outcome == 'failure' }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
@@ -317,116 +339,8 @@ jobs:
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
         if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
-        run: |
-          echo "Deployment to staging failed."
-          exit 1
-
-  deploy-to-production:
-    if: |
-      always() &&
-      github.event_name == 'push' &&
-      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-      needs.build.result == 'success' &&
-      (needs.test-typecheck.result == 'success' || needs.test-typecheck.result == 'skipped') &&
-      (needs.lint-markdown.result == 'success' || needs.lint-markdown.result == 'skipped') &&
-      (needs.lint-oxlint.result == 'success' || needs.lint-oxlint.result == 'skipped') &&
-      (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
-      (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
-    name: Deploy to production
-    runs-on: ubuntu-24.04
-    needs:
-      - build
-      - test-typecheck
-      - lint-markdown
-      - lint-oxlint
-      - test-unit
-      - test-e2e
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
-    steps:
-      # Setup pnpm and download artifact
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
-        with:
-          install-dependencies: true
-      - name: Download build artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ inputs.artifact-name }}
-          path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
-
-      # Set wrangler log file path for capturing output
-      - name: Set wrangler output file path
-        id: set-wrangler-log
-        run: |
-          WRANGLER_LOG=/tmp/wrangler-$(date '+%s%N').log
-          echo "wrangler-log=$WRANGLER_LOG" >> $GITHUB_OUTPUT
-
-      # Deploy to Cloudflare Workers
-      - name: Deploy to production
-        continue-on-error: true
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare-account-id }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.cloudflare-api-token }}
+          DEPLOYMENT_TARGET: ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
         run: |
-          export WRANGLER_OUTPUT_FILE_PATH=${{ steps.set-wrangler-log.outputs.wrangler-log }}
-          pnpm run ${{ inputs.deploy-to-production-command }}
-
-      # Extract deployment URL from wrangler log
-      - name: Get deployment URLs
-        id: get-deployment-urls
-        continue-on-error: true
-        run: |
-          # Extract all targets from wrangler log as newline-separated list
-          TARGETS=$(jq --raw-output --slurp 'first(.[] | select(.targets)) | .targets[]' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
-
-          if [ -z "$TARGETS" ]; then
-            echo "Error: No production URLs found in wrangler log"
-            exit 1
-          fi
-
-          # Process each target: add https:// prefix if needed
-          URLS=""
-          while IFS= read -r target; do
-            if [ -z "$target" ]; then continue; fi
-            if [[ "$target" != https://* ]]; then
-              URLS+="https://$target"$'\n'
-            else
-              URLS+="$target"$'\n'
-            fi
-          done <<< "$TARGETS"
-
-          echo "production-urls<<EOF" >> $GITHUB_OUTPUT
-          echo -n "$URLS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # Create deployment summary
-      - name: Create deployment summary
-        if: always()
-        run: |
-          echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-
-          if [[ "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-
-            while IFS= read -r url; do
-              if [ -z "$url" ]; then continue; fi
-              echo "- $url" >> $GITHUB_STEP_SUMMARY
-            done <<< "${{ steps.get-deployment-urls.outputs.production-urls }}"
-          fi
-
-      # Fail the workflow if deployment failed
-      - name: Fail workflow if deployment failed
-        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
-        run: |
-          echo "Deployment to production failed."
+          echo "Deployment to $DEPLOYMENT_TARGET failed."
           exit 1
