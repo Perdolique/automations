@@ -16,7 +16,7 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
 - ✅ Runs opt-in checks before deploy
 - 🎯 Deploys to staging on every PR
 - 🚀 Deploys to production on push to default branch
-- 💬 Comments on PR with preview URL
+- 💬 Comments on PR with all staging deployment URLs
 
 **Inputs:**
 
@@ -32,7 +32,9 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
   empty (default: empty)
 - `playwright-browsers` - Space-separated Playwright browsers installed before
   end-to-end tests (default: empty)
-- `deploy-to-staging-command` - pnpm script name for deploying to staging (default: `deploy:versions:staging`)
+- `deploy-to-staging-command` - pnpm script name for deploying to staging
+  (default: `deploy:versions:staging`). Both version previews and direct Worker
+  deployments are supported.
 - `deploy-to-production-command` - pnpm script name for deploying to production (default: `deploy:production`)
 
 Optional checks gate both staging and production deploys. If a check command is not provided, its job is skipped.

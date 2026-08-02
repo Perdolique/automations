@@ -227,7 +227,7 @@ jobs:
           echo "wrangler-log=$WRANGLER_LOG" >> $GITHUB_OUTPUT
 
       # Deploy to Cloudflare Workers
-      - name: Deploy version to staging
+      - name: Deploy to staging
         continue-on-error: true
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.cloudflare-account-id }}
@@ -236,19 +236,36 @@ jobs:
           export WRANGLER_OUTPUT_FILE_PATH=${{ steps.set-wrangler-log.outputs.wrangler-log }}
           pnpm run ${{ inputs.deploy-to-staging-command }}
 
-      # Extract deployment URL from wrangler log
-      - name: Get deployment URL
-        id: get-deployment-url
+      # Extract deployment URLs from wrangler log
+      - name: Get deployment URLs
+        id: get-deployment-urls
         continue-on-error: true
         run: |
-          PREVIEW_URL=$(jq --raw-output --slurp 'first(.[] | select(.preview_url) | .preview_url)' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
+          DEPLOYMENT_URLS=$(jq --raw-output --slurp '
+            [
+              .[] |
+              .preview_url?,
+              .targets[]?
+            ] |
+            map(select(type == "string" and length > 0)) |
+            map(if startswith("http://") or startswith("https://") then . else "https://" + . end) |
+            unique[]
+          ' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
 
-          if [ -z "$PREVIEW_URL" ]; then
-            echo "Error: No preview_url found in wrangler log"
+          if [ -z "$DEPLOYMENT_URLS" ]; then
+            echo "Error: No deployment URLs found in wrangler log"
             exit 1
           fi
 
-          echo "preview-url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "deployment-urls<<EOF" >> $GITHUB_OUTPUT
+          echo "$DEPLOYMENT_URLS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "deployment-links<<EOF" >> $GITHUB_OUTPUT
+          while IFS= read -r url; do
+            echo "  - $url" >> $GITHUB_OUTPUT
+          done <<< "$DEPLOYMENT_URLS"
+          echo "EOF" >> $GITHUB_OUTPUT
 
       # Create deployment summary
       - name: Create deployment summary
@@ -258,27 +275,37 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.get-deployment-url.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.event.pull_request.head.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`${{ github.event.pull_request.head.ref }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **PR** | [#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Preview URL** | ${{ steps.get-deployment-url.outcome == 'success' && steps.get-deployment-url.outputs.preview-url || 'Not available' }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            while IFS= read -r url; do
+              echo "- $url" >> $GITHUB_STEP_SUMMARY
+            done <<< "${{ steps.get-deployment-urls.outputs.deployment-urls }}"
+          fi
 
       # Comment on the pull request with success status
-      - name: Comment successful deployment URL
-        if: ${{ steps.get-deployment-url.outcome == 'success' }}
+      - name: Comment successful deployment URLs
+        if: ${{ steps.get-deployment-urls.outcome == 'success' }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
             ## 🎉 Deployed to Cloudflare!
 
             - Commit: `${{ github.event.pull_request.head.sha }}`
-            - Preview URL: ${{ steps.get-deployment-url.outputs.preview-url }}
+            - Deployment URLs:
+            ${{ steps.get-deployment-urls.outputs.deployment-links }}
 
       # Comment on the pull request with failure status
       - name: Comment deployment failure
-        if: ${{ steps.get-deployment-url.outcome == 'failure' }}
+        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
@@ -289,7 +316,7 @@ jobs:
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
-        if: ${{ steps.get-deployment-url.outcome == 'failure' }}
+        if: ${{ steps.get-deployment-urls.outcome == 'failure' }}
         run: |
           echo "Deployment to staging failed."
           exit 1
