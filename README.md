@@ -103,6 +103,8 @@ Sets up pnpm and Node.js environment 📦
 **Inputs:**
 
 - `install-dependencies` - Whether to install dependencies (default: `false`)
+- `cache` - Whether to cache the pnpm store directory (default: `true`)
+- `registry-url` - Optional registry to configure for authentication
 
 **Example:**
 
@@ -110,6 +112,8 @@ Sets up pnpm and Node.js environment 📦
 - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
   with:
     install-dependencies: true
+    cache: false
+    registry-url: https://registry.npmjs.org
 ```
 
 ## Dependabot 🤖

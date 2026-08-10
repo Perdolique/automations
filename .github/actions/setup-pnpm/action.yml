@@ -7,19 +7,32 @@ inputs:
     required: false
     default: 'false'
 
+  cache:
+    description: Whether to cache the pnpm store directory
+    required: false
+    default: 'true'
+
+  registry-url:
+    description: Optional registry to configure for authentication
+    required: false
+
 runs:
   using: composite
   steps:
     - name: Checkout code
       uses: actions/checkout@v7
+
     - name: Setup Node.js
       uses: actions/setup-node@v7
       with:
         node-version-file: .node-version
+        registry-url: ${{ inputs.registry-url }}
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v6
       with:
-        cache: true
+        cache: ${{ inputs.cache }}
+
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       run: |
