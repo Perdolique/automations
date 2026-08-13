@@ -2,6 +2,11 @@ name: Setup pnpm and install dependencies composite action
 description: Sets up pnpm, Node.js environment, and optionally installs project dependencies
 
 inputs:
+  ref:
+    description: Branch, tag, or SHA to checkout
+    required: false
+    default: ''
+
   install-dependencies:
     description: Whether to install dependencies
     required: false
@@ -21,6 +26,8 @@ runs:
   steps:
     - name: Checkout code
       uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.ref }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v7

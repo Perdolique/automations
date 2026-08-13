@@ -102,6 +102,7 @@ Sets up pnpm and Node.js environment 📦
 
 **Inputs:**
 
+- `ref` - Optional branch, tag, or SHA to check out (default: the workflow ref)
 - `install-dependencies` - Whether to install dependencies (default: `false`)
 - `cache` - Whether to cache the pnpm store directory (default: `true`)
 - `registry-url` - Optional registry to configure for authentication
@@ -111,6 +112,7 @@ Sets up pnpm and Node.js environment 📦
 ```yaml
 - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
   with:
+    ref: ${{ github.sha }}
     install-dependencies: true
     cache: false
     registry-url: https://registry.npmjs.org
