@@ -1,0 +1,150 @@
+name: Reusable Migrate and Deploy Workflow
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: Working directory for the project
+        required: false
+        default: '.'
+        type: string
+      artifact-path:
+        description: Path to the build output directory
+        required: false
+        default: '.output'
+        type: string
+      artifact-name:
+        description: Name of the deployment artifact
+        required: false
+        default: 'deployment-artifact'
+        type: string
+      build-command:
+        description: pnpm script name for building the project
+        required: false
+        default: 'build'
+        type: string
+      test-typecheck-command:
+        description: pnpm script name for type checking (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      lint-markdown-command:
+        description: pnpm script name for markdown linting (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      lint-oxlint-command:
+        description: pnpm script name for oxlint (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      test-unit-command:
+        description: pnpm script name for unit tests (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      test-e2e-command:
+        description: pnpm script name for end-to-end tests (optional, skipped if empty)
+        required: false
+        default: ''
+        type: string
+      playwright-browsers:
+        description: Space-separated Playwright browsers to install before end-to-end tests
+        required: false
+        default: ''
+        type: string
+      deploy-to-staging-command:
+        description: pnpm script name for deploying to staging
+        required: false
+        default: 'deploy:versions:staging'
+        type: string
+      deploy-to-production-command:
+        description: pnpm script name for deploying to production
+        required: false
+        default: 'deploy:production'
+        type: string
+      database-migration-command:
+        description: pnpm script name for applying database migrations
+        required: true
+        type: string
+      database-url-secret-name:
+        description: GitHub Environment secret containing the database owner URL
+        required: false
+        default: 'DATABASE_URL'
+        type: string
+      database-url-environment-variable:
+        description: Environment variable exposed to the migration script
+        required: false
+        default: 'DATABASE_URL'
+        type: string
+    secrets:
+      cloudflare-account-id:
+        description: Cloudflare account ID
+        required: true
+      cloudflare-api-token:
+        description: Cloudflare API token
+        required: true
+
+concurrency:
+  group: migrate-and-deploy-${{ inputs.artifact-name }}-${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  migration:
+    name: Database migration
+    runs-on: ubuntu-24.04
+    environment: ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+        with:
+          install-dependencies: true
+      - name: Run database migration
+        env:
+          DATABASE_MIGRATION_COMMAND: ${{ inputs.database-migration-command }}
+          DATABASE_URL_ENVIRONMENT_VARIABLE: ${{ inputs.database-url-environment-variable }}
+          DATABASE_URL_SECRET_NAME: ${{ inputs.database-url-secret-name }}
+          DATABASE_URL_VALUE: ${{ secrets[inputs.database-url-secret-name] }}
+        run: |
+          if [[ ! "$DATABASE_URL_ENVIRONMENT_VARIABLE" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            echo "Invalid database URL environment variable name." >&2
+            exit 1
+          fi
+
+          if [[ -z "$DATABASE_URL_VALUE" ]]; then
+            echo "Required database secret '$DATABASE_URL_SECRET_NAME' is not configured." >&2
+            exit 1
+          fi
+
+          export "$DATABASE_URL_ENVIRONMENT_VARIABLE=$DATABASE_URL_VALUE"
+          pnpm run "$DATABASE_MIGRATION_COMMAND"
+
+  deploy:
+    name: Deploy
+    needs: migration
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      working-directory: ${{ inputs.working-directory }}
+      artifact-path: ${{ inputs.artifact-path }}
+      artifact-name: ${{ inputs.artifact-name }}
+      build-command: ${{ inputs.build-command }}
+      test-typecheck-command: ${{ inputs.test-typecheck-command }}
+      lint-markdown-command: ${{ inputs.lint-markdown-command }}
+      lint-oxlint-command: ${{ inputs.lint-oxlint-command }}
+      test-unit-command: ${{ inputs.test-unit-command }}
+      test-e2e-command: ${{ inputs.test-e2e-command }}
+      playwright-browsers: ${{ inputs.playwright-browsers }}
+      deploy-to-staging-command: ${{ inputs.deploy-to-staging-command }}
+      deploy-to-production-command: ${{ inputs.deploy-to-production-command }}
+    secrets:
+      cloudflare-account-id: ${{ secrets.cloudflare-account-id }}
+      cloudflare-api-token: ${{ secrets.cloudflare-api-token }}

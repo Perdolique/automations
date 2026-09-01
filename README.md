@@ -94,6 +94,43 @@ jobs:
       cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 ```
 
+#### `migrate-and-deploy.yml`
+
+Reusable wrapper that applies a database migration before calling `deploy.yml`
+from the same automations commit. The complete migration and deployment sequence
+is serialized per artifact and target environment, so queued releases cannot
+deploy across another release's migration.
+
+The wrapper accepts every `deploy.yml` input and secret, plus:
+
+- `database-migration-command` - pnpm script name for applying migrations
+  (required)
+- `database-url-secret-name` - GitHub Environment secret containing the owner
+  connection string (default: `DATABASE_URL`)
+- `database-url-environment-variable` - Environment variable exposed only to
+  the migration script (default: `DATABASE_URL`)
+
+Define the database secret separately in the caller repository's `staging` and
+`production` GitHub Environments. The migration job receives only that
+environment's database secret. The nested deployment receives only the
+Cloudflare secrets and starts only after the migration succeeds.
+
+```yaml
+jobs:
+  migrate-and-deploy:
+    uses: Perdolique/automations/.github/workflows/migrate-and-deploy.yml@v3
+    with:
+      artifact-path: apps/web/.output
+      artifact-name: my-workers
+      build-command: build
+      database-migration-command: db:migrate
+      deploy-to-staging-command: deploy:staging
+      deploy-to-production-command: deploy:production
+    secrets:
+      cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+```
+
 ### Actions 🎬
 
 #### `setup-pnpm`
