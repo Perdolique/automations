@@ -16,7 +16,9 @@ Reusable workflow for building and deploying projects to Cloudflare Workers 🌬
 - ✅ Runs opt-in checks before deploy
 - 🎯 Deploys to staging on every PR
 - 🚀 Deploys to production on push to default branch
-- 💬 Comments on PR with all staging deployment URLs
+- 💬 Comments on PR with staging deployment URLs and cron schedules
+
+Version v4 runs all check, build, and deploy jobs on Ubuntu 26.04. Version v3 stays on Ubuntu 24.04.
 
 **Inputs:**
 
@@ -75,7 +77,7 @@ on:
 
 jobs:
   deploy:
-    uses: Perdolique/automations/.github/workflows/deploy.yml@v3
+    uses: Perdolique/automations/.github/workflows/deploy.yml@v4
     with:
       working-directory: '.'
       artifact-path: '.output'
@@ -110,7 +112,7 @@ Sets up pnpm and Node.js environment 📦
 **Example:**
 
 ```yaml
-- uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+- uses: Perdolique/automations/.github/actions/setup-pnpm@v4
   with:
     ref: ${{ github.sha }}
     install-dependencies: true

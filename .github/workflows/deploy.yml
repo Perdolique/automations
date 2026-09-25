@@ -83,12 +83,12 @@ jobs:
   test-typecheck:
     if: inputs.test-typecheck-command != ''
     name: Typecheck
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Run typecheck
@@ -98,12 +98,12 @@ jobs:
   lint-markdown:
     if: inputs.lint-markdown-command != ''
     name: Markdown lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Run markdown lint
@@ -113,12 +113,12 @@ jobs:
   lint-oxlint:
     if: inputs.lint-oxlint-command != ''
     name: Oxlint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Run lint
@@ -128,12 +128,12 @@ jobs:
   test-unit:
     if: inputs.test-unit-command != ''
     name: Unit tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Run unit tests
@@ -143,12 +143,12 @@ jobs:
   test-e2e:
     if: inputs.test-e2e-command != ''
     name: End-to-end tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Install Playwright browsers
@@ -162,12 +162,12 @@ jobs:
   # Build the project and upload artifact
   build:
     name: Build artifact
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Build project
@@ -199,7 +199,7 @@ jobs:
       (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
       (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
     name: Deploy to ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: write
@@ -215,7 +215,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       # Setup pnpm and download artifact
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v3
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
         with:
           install-dependencies: true
       - name: Download build artifact
@@ -249,9 +249,9 @@ jobs:
             pnpm run "$PRODUCTION_DEPLOY_COMMAND"
           fi
 
-      # Extract deployment URLs from wrangler log
-      - name: Get deployment URLs
-        id: get-deployment-urls
+      # Extract deployment URLs and cron schedules from wrangler log
+      - name: Get deployment details
+        id: get-deployment-details
         continue-on-error: true
         run: |
           DEPLOYMENT_URLS=$(jq --raw-output --slurp '
@@ -260,13 +260,18 @@ jobs:
               .preview_url?,
               .targets[]?
             ] |
-            map(select(type == "string" and length > 0)) |
+            map(select(type == "string" and length > 0 and (startswith("schedule: ") | not))) |
             map(if startswith("http://") or startswith("https://") then . else "https://" + . end) |
             unique[]
           ' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
 
-          if [ -z "$DEPLOYMENT_URLS" ]; then
-            echo "Error: No deployment URLs found in wrangler log"
+          DEPLOYMENT_SCHEDULES=$(jq --raw-output --slurp '
+            [.[] | .targets[]? | select(type == "string" and startswith("schedule: ")) | ltrimstr("schedule: ")] |
+            unique[]
+          ' ${{ steps.set-wrangler-log.outputs.wrangler-log }})
+
+          if [ -z "$DEPLOYMENT_URLS" ] && [ -z "$DEPLOYMENT_SCHEDULES" ]; then
+            echo "Error: No deployment URLs or cron schedules found in wrangler log"
             exit 1
           fi
 
@@ -274,10 +279,26 @@ jobs:
           echo "$DEPLOYMENT_URLS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          echo "deployment-links<<EOF" >> $GITHUB_OUTPUT
-          while IFS= read -r url; do
-            echo "  - $url" >> $GITHUB_OUTPUT
-          done <<< "$DEPLOYMENT_URLS"
+          echo "deployment-schedules<<EOF" >> $GITHUB_OUTPUT
+          echo "$DEPLOYMENT_SCHEDULES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "deployment-details<<EOF" >> $GITHUB_OUTPUT
+          if [ -n "$DEPLOYMENT_URLS" ]; then
+            echo "- Deployment URLs:" >> $GITHUB_OUTPUT
+            while IFS= read -r url; do
+              echo "  - $url" >> $GITHUB_OUTPUT
+            done <<< "$DEPLOYMENT_URLS"
+          fi
+          if [ -n "$DEPLOYMENT_SCHEDULES" ]; then
+            if [ -n "$DEPLOYMENT_URLS" ]; then
+              echo "" >> $GITHUB_OUTPUT
+            fi
+            echo "- Cron schedules:" >> $GITHUB_OUTPUT
+            while IFS= read -r schedule; do
+              printf '  - `%s`\n' "$schedule" >> $GITHUB_OUTPUT
+            done <<< "$DEPLOYMENT_SCHEDULES"
+          fi
           echo "EOF" >> $GITHUB_OUTPUT
 
       # Create deployment summary
@@ -294,7 +315,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Status** | ${{ steps.deploy.outcome == 'success' && steps.get-deployment-urls.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.deploy.outcome == 'success' && steps.get-deployment-details.outcome == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`$DEPLOYMENT_SHA\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Branch** | \`$DEPLOYMENT_BRANCH\` |" >> $GITHUB_STEP_SUMMARY
 
@@ -304,31 +325,42 @@ jobs:
 
           echo "| **Deployed by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
 
-          if [[ "${{ steps.deploy.outcome }}" == "success" && "${{ steps.get-deployment-urls.outcome }}" == "success" ]]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.deploy.outcome }}" == "success" && "${{ steps.get-deployment-details.outcome }}" == "success" ]]; then
+            if [[ -n "${{ steps.get-deployment-details.outputs.deployment-urls }}" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 🔗 URLs" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
 
-            while IFS= read -r url; do
-              echo "- $url" >> $GITHUB_STEP_SUMMARY
-            done <<< "${{ steps.get-deployment-urls.outputs.deployment-urls }}"
+              while IFS= read -r url; do
+                echo "- $url" >> $GITHUB_STEP_SUMMARY
+              done <<< "${{ steps.get-deployment-details.outputs.deployment-urls }}"
+            fi
+
+            if [[ -n "${{ steps.get-deployment-details.outputs.deployment-schedules }}" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Cron schedules" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              while IFS= read -r schedule; do
+                printf -- '- `%s`\n' "$schedule" >> $GITHUB_STEP_SUMMARY
+              done <<< "${{ steps.get-deployment-details.outputs.deployment-schedules }}"
+            fi
           fi
 
       # Comment on the pull request with success status
-      - name: Comment successful deployment URLs
-        if: ${{ github.event_name == 'pull_request' && steps.deploy.outcome == 'success' && steps.get-deployment-urls.outcome == 'success' }}
+      - name: Comment successful deployment details
+        if: ${{ github.event_name == 'pull_request' && steps.deploy.outcome == 'success' && steps.get-deployment-details.outcome == 'success' }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
             ## 🎉 Deployed to Cloudflare!
 
             - Commit: `${{ github.event.pull_request.head.sha }}`
-            - Deployment URLs:
-            ${{ steps.get-deployment-urls.outputs.deployment-links }}
+            ${{ steps.get-deployment-details.outputs.deployment-details }}
 
       # Comment on the pull request with failure status
       - name: Comment deployment failure
-        if: ${{ github.event_name == 'pull_request' && (steps.deploy.outcome == 'failure' || steps.get-deployment-urls.outcome == 'failure') }}
+        if: ${{ github.event_name == 'pull_request' && (steps.deploy.outcome == 'failure' || steps.get-deployment-details.outcome == 'failure') }}
         uses: marocchino/sticky-pull-request-comment@v3
         with:
           message: |
@@ -339,7 +371,7 @@ jobs:
 
       # Fail the workflow if deployment failed
       - name: Fail workflow if deployment failed
-        if: ${{ steps.deploy.outcome == 'failure' || steps.get-deployment-urls.outcome == 'failure' }}
+        if: ${{ steps.deploy.outcome == 'failure' || steps.get-deployment-details.outcome == 'failure' }}
         env:
           DEPLOYMENT_TARGET: ${{ github.event_name == 'pull_request' && 'staging' || 'production' }}
         run: |
