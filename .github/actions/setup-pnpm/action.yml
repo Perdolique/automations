@@ -17,6 +17,11 @@ inputs:
     required: false
     default: 'true'
 
+  working-directory:
+    description: Project directory containing package.json and pnpm-lock.yaml, relative to the repository root
+    required: false
+    default: '.'
+
   registry-url:
     description: Optional registry to configure for authentication
     required: false
@@ -39,9 +44,12 @@ runs:
       uses: pnpm/action-setup@v6
       with:
         cache: ${{ inputs.cache }}
+        package_json_file: ${{ inputs.working-directory }}/package.json
+        cache_dependency_path: ${{ inputs.working-directory }}/pnpm-lock.yaml
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       run: |
         pnpm install --frozen-lockfile
       shell: bash
+      working-directory: ${{ inputs.working-directory }}

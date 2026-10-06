@@ -107,6 +107,7 @@ Sets up pnpm and Node.js environment 📦
 - `ref` - Optional branch, tag, or SHA to check out (default: the workflow ref)
 - `install-dependencies` - Whether to install dependencies (default: `false`)
 - `cache` - Whether to cache the pnpm store directory (default: `true`)
+- `working-directory` - Project directory containing `package.json` and `pnpm-lock.yaml`, relative to the repository root. Also used for installing dependencies (default: `.`)
 - `registry-url` - Optional registry to configure for authentication
 
 **Example:**
@@ -118,6 +119,33 @@ Sets up pnpm and Node.js environment 📦
     install-dependencies: true
     cache: false
     registry-url: https://registry.npmjs.org
+```
+
+**Separate projects in one repository:**
+
+Set `working-directory` when each project has its own `package.json` and lockfile.
+The action reads both files from that directory and installs dependencies there.
+The action reads the Node.js version from `.node-version` in the repository root.
+Set `working-directory` on the action for installation and on the job for later commands.
+Job `defaults.run.working-directory` does not set the action's `working-directory` input.
+
+```yaml
+jobs:
+  check:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        project: [worker, site]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+        with:
+          working-directory: ${{ matrix.project }}
+          install-dependencies: true
+      - name: Check project
+        run: pnpm run check
 ```
 
 ## Dependabot 🤖
