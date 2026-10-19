@@ -88,7 +88,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Run typecheck
@@ -103,7 +103,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Run markdown lint
@@ -118,7 +118,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Run lint
@@ -133,7 +133,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Run unit tests
@@ -148,7 +148,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Install Playwright browsers
@@ -167,7 +167,7 @@ jobs:
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Build project
@@ -175,7 +175,7 @@ jobs:
           pnpm run ${{ inputs.build-command }}
       - name: Upload build artifact
         id: upload-artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.2
         with:
           include-hidden-files: true
           if-no-files-found: error
@@ -215,11 +215,11 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       # Setup pnpm and download artifact
-      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4
+      - uses: Perdolique/automations/.github/actions/setup-pnpm@v4.1.0
         with:
           install-dependencies: true
       - name: Download build artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v8.0.2
         with:
           name: ${{ inputs.artifact-name }}
           path: ${{ inputs.working-directory == '.' && inputs.artifact-path || format('{0}/{1}', inputs.working-directory, inputs.artifact-path) }}
@@ -350,7 +350,7 @@ jobs:
       # Comment on the pull request with success status
       - name: Comment successful deployment details
         if: ${{ github.event_name == 'pull_request' && steps.deploy.outcome == 'success' && steps.get-deployment-details.outcome == 'success' }}
-        uses: marocchino/sticky-pull-request-comment@v3
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           message: |
             ## 🎉 Deployed to Cloudflare!
@@ -361,7 +361,7 @@ jobs:
       # Comment on the pull request with failure status
       - name: Comment deployment failure
         if: ${{ github.event_name == 'pull_request' && (steps.deploy.outcome == 'failure' || steps.get-deployment-details.outcome == 'failure') }}
-        uses: marocchino/sticky-pull-request-comment@v3
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           message: |
             ## ❌ Deployment to Cloudflare failed!

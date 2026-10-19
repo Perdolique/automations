@@ -30,13 +30,9 @@ Version v4 runs all check, build, and deploy jobs on Ubuntu 26.04. Version v3 st
 - `lint-markdown-command` - pnpm script name for markdown linting, skipped if empty (default: empty)
 - `lint-oxlint-command` - pnpm script name for oxlint, skipped if empty (default: empty)
 - `test-unit-command` - pnpm script name for unit tests, skipped if empty (default: empty)
-- `test-e2e-command` - pnpm script name for end-to-end tests, skipped if
-  empty (default: empty)
-- `playwright-browsers` - Space-separated Playwright browsers installed before
-  end-to-end tests (default: empty)
-- `deploy-to-staging-command` - pnpm script name for deploying to staging
-  (default: `deploy:versions:staging`). Both version previews and direct Worker
-  deployments are supported.
+- `test-e2e-command` - pnpm script name for end-to-end tests, skipped if empty (default: empty)
+- `playwright-browsers` - Space-separated Playwright browsers installed before end-to-end tests (default: empty)
+- `deploy-to-staging-command` - pnpm script name for deploying to staging (default: `deploy:versions:staging`). Both version previews and direct Worker deployments are supported.
 - `deploy-to-production-command` - pnpm script name for deploying to production (default: `deploy:production`)
 
 Optional checks gate both staging and production deploys. If a check command is not provided, its job is skipped.
@@ -123,11 +119,7 @@ Sets up pnpm and Node.js environment 📦
 
 **Separate projects in one repository:**
 
-Set `working-directory` when each project has its own `package.json` and lockfile.
-The action reads both files from that directory and installs dependencies there.
-The action reads the Node.js version from `.node-version` in the repository root.
-Set `working-directory` on the action for installation and on the job for later commands.
-Job `defaults.run.working-directory` does not set the action's `working-directory` input.
+Set `working-directory` when each project has its own `package.json` and lockfile. The action reads both files from that directory and installs dependencies there. The action reads the Node.js version from `.node-version` in the repository root. Set `working-directory` on the action for installation and on the job for later commands. Job `defaults.run.working-directory` does not set the action's `working-directory` input.
 
 ```yaml
 jobs:
@@ -159,6 +151,17 @@ For Dependabot PRs to trigger deployment workflows, you need to add secrets for 
 Make sure to add `CLOUDFLARE_API_TOKEN` to your repository's Dependabot secrets. Otherwise, deployment workflows on Dependabot PRs will fail! 💥
 
 Check out the [GitHub docs on configuring Dependabot secrets](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configuring-access-to-private-registries-for-dependabot#storing-credentials-for-dependabot-to-use) for the full guide 📚
+
+## Action Dependency Lockfile 🔒
+
+`.github/workflows/actions.lock` pins workflow action dependencies to exact commits. Regenerate it after changing action dependencies and commit it with the workflow changes:
+
+```sh
+gh extension install github/gh-actions-lock --pin v0.2.0
+gh actions-lock
+```
+
+`actions-lock.yml` verifies the lockfile on PRs and pushes to `master` that change workflows or action definitions.
 
 ## License 📄
 
